@@ -46,7 +46,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   font-variant-numeric:tabular-nums;letter-spacing:.01em}
 
 /* ---- 盤面 ---- */
-#board{position:relative;flex:1;overflow:hidden;touch-action:none;min-height:0}
+#board{position:relative;flex:1;overflow:hidden;touch-action:none;min-height:0;--d:68px}
 #cols{position:absolute;inset:0;pointer-events:none}
 .col{position:absolute;top:0;bottom:0;border-right:1px solid var(--line)}
 .col:last-child{border-right:0}
@@ -57,34 +57,17 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .pc{position:absolute;left:0;top:0;will-change:transform;
   transform:translate(-50%,-50%) translate(var(--x),var(--y))}
 .pc.anim{transition:transform var(--dur) cubic-bezier(.4,0,.2,1)}
-.face{position:relative;display:grid;place-items:center;
-  width:var(--d);height:var(--d);border-radius:50%;
-  box-shadow:0 1px 0 rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.16);
-  color:#17150F;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
-.face.bill{border-radius:calc(var(--d)*.13);height:calc(var(--d)*.66);
-  border:1px solid rgba(0,0,0,.18)}
-.face .num{font-size:var(--fs);letter-spacing:-.03em}
-.face.hole::after{content:"";position:absolute;width:24%;height:24%;border-radius:50%;
-  background:var(--paper);box-shadow:inset 0 1px 2px rgba(0,0,0,.35)}
-.face.hole .num{transform:translateY(calc(var(--d)*-0.20));font-size:calc(var(--fs)*.9)}
-.face.bi{box-shadow:0 1px 0 rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.16),
-  inset 0 0 0 calc(var(--d)*.115) #D9CFA4}
-.pc.sel .face{box-shadow:0 0 0 4px var(--paper),0 0 0 8px var(--ai-ring),0 2px 6px rgba(0,0,0,.2)}
+.face{display:block;width:var(--d);height:var(--d);overflow:visible;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.28))}
+.face text{font-family:var(--rounded);font-weight:800;
+  font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+.pc.sel{--selc:var(--ai-ring);--selp:var(--paper)}
 .pc.ghost{opacity:0;transform:translate(-50%,-50%) translate(var(--x),var(--y)) scale(.4);
   transition:opacity .22s,transform .22s}
 @keyframes pop{from{transform:translate(-50%,-50%) translate(var(--x),var(--y)) scale(.35);opacity:0}
   to{transform:translate(-50%,-50%) translate(var(--x),var(--y)) scale(1);opacity:1}}
 .pc.pop{animation:pop .26s cubic-bezier(.2,1.4,.5,1)}
-
-.f1{background:linear-gradient(160deg,#F1F2F3,#DCDEE0)}
-.f5{background:linear-gradient(160deg,#E7D7A2,#D3BD7F)}
-.f10{background:linear-gradient(160deg,#D2A377,#B9855B)}
-.f50{background:linear-gradient(160deg,#CCCFD2,#B2B6BA)}
-.f100{background:linear-gradient(160deg,#BBC0C5,#9FA5AB)}
-.f500{background:linear-gradient(160deg,#D2AE55,#B9963F)}
-.f1000{background:linear-gradient(170deg,#C3D3E2,#A8BCD0)}
-.f5000{background:linear-gradient(170deg,#CDBEDA,#B3A1C4)}
-.f10000{background:linear-gradient(170deg,#C6BCA6,#ADA189)}
+#sprite{position:absolute;width:0;height:0;overflow:hidden}
 
 #marq{position:absolute;border:2px solid var(--ai);background:color-mix(in srgb,var(--ai) 12%,transparent);
   border-radius:4px;pointer-events:none}
@@ -99,13 +82,14 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 #ctx button:active{transform:translateY(1px)}
 #ctx .opt{display:flex;align-items:center;gap:7px;background:var(--paper-2);color:var(--ink);
   border:1px solid var(--line);padding:7px 12px 7px 8px}
-#ctx .opt .mini{--d:34px;--fs:13px}
+#ctx .opt{--d:38px}
 #ctx .opt .x{font-size:17px;font-weight:800}
 
 /* ---- パレット ---- */
 #tray{flex:none;display:flex;align-items:flex-end;gap:10px;padding:10px 12px;
   border-top:1px solid var(--line);background:var(--paper-2)}
 #pal{display:flex;flex-wrap:wrap;gap:8px;flex:1;align-items:center}
+#pal{--d:54px}
 #pal .chip{border-radius:14px;padding:5px;background:transparent;line-height:0}
 #pal .chip:active{background:var(--ai-soft)}
 #pal.convert{background:var(--ai-soft);border-radius:16px;padding:4px}
@@ -176,18 +160,143 @@ let coins=[], sel=new Set(), hist=[], busy=false, uid=1;
 let CS=68, slotH=64, colW=0, colX={};
 
 /* ---------- 貨幣の描画 ---------- */
-function faceHTML(v,d,cls){
-  const bill=v>=1000, hole=(v===5||v===50), bi=(v===500);
-  const digits=String(v).length;
-  const fs=Math.round(d*(digits<=2?0.42:digits===3?0.34:digits===4?0.27:0.22));
-  return '<div class="face f'+v+(bill?" bill":"")+(hole?" hole":"")+(bi?" bi":"")+(cls?" "+cls:"")+
-    '" style="--d:'+d+'px;--fs:'+fs+'px"><span class="num">'+v+'</span></div>';
+/* ---------- 貨幣の図案（SVGスプライト） ----------
+   実物画像は使わない（模造取締法／素材の再配布）。実物の識別手がかり
+   ――穴・ギザ・金属色・植物モチーフ――を写実でなく図案として起こす。 */
+const MET={
+  1   :{a:"#F5F7F9",b:"#BCC2C9",rim:"#959BA2",ink:"#343A40",motif:"#5A6067"},
+  5   :{a:"#F3E3A8",b:"#C8A74B",rim:"#A68933",ink:"#4A3A10",motif:"#6B551B",hole:1},
+  10  :{a:"#E4B68D",b:"#A56E47",rim:"#875636",ink:"#3E2413",motif:"#6B4023"},
+  50  :{a:"#E7EAED",b:"#A5ABB2",rim:"#888F96",ink:"#33383D",motif:"#5A6067",hole:1,reed:78},
+  100 :{a:"#EDEFF1",b:"#9DA4AB",rim:"#81888F",ink:"#2E3338",motif:"#565C63",reed:86},
+  500 :{a:"#EBC961",b:"#BC9430",rim:"#9A7724",ink:"#40310A",motif:"#6B5416",reed:92,skew:.05,
+        inner:{a:"#E9EBED",b:"#B2B7BC"}},
+  1000:{a:"#D4E3F0",b:"#7FA3C4",rim:"#5D82A5",ink:"#16324C",motif:"#2E547B",bill:1},
+  5000:{a:"#DFCFE9",b:"#9B80B8",rim:"#7A6096",ink:"#33204A",bill:1},
+  10000:{a:"#E1D7C2",b:"#A79473",rim:"#87755A",ink:"#372C16",bill:1}
+};
+MET[1000].motif="#2E547B"; MET[5000].motif="#5B3F7E"; MET[10000].motif="#6B5A3A";
+
+function reedPath(n,r0,r1,skew){
+  let d="";
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2, b=a+(skew||0);
+    d+="M"+(50+Math.cos(a)*r0).toFixed(2)+" "+(50+Math.sin(a)*r0).toFixed(2)+
+       "L"+(50+Math.cos(b)*r1).toFixed(2)+" "+(50+Math.sin(b)*r1).toFixed(2);
+  }
+  return d;
+}
+/* モチーフは「その貨幣だと気づくための記号」。数字が主手がかりなので、
+   中央には置かず外周の弧に小さく収める。穴のある5円50円は数字が上なので下の弧へ。 */
+function flower(cx,cy,R,n,pr){
+  n=n||5; pr=pr||.34;
+  let s="";
+  for(let i=0;i<n;i++)
+    s+='<ellipse cx="'+cx+'" cy="'+(cy-R*.58).toFixed(1)+'" rx="'+(R*(pr||.34)).toFixed(1)+'" ry="'+(R*.5).toFixed(1)+
+       '" transform="rotate('+(i*360/n).toFixed(1)+' '+cx+' '+cy+')"/>';
+  return s+'<circle cx="'+cx+'" cy="'+cy+'" r="'+(R*.18).toFixed(1)+'"/>';
+}
+function reedPath2(){return"";}
+const MOTIF={
+  /* 若木（上の弧） */
+  1:'<g transform="translate(50 24)">'+
+    '<path d="M0 13V-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'+
+    '<path d="M0 1c-7-.5-10.5-5-10.5-11C-4.5-12 0-7 0 1z"/><path d="M0 1c7-.5 10.5-5 10.5-11C4.5-12 0-7 0 1z"/>'+
+    '<path d="M0 11c-5.5 0-8.5-3.5-8.5-7.5C-3.5 3.5 0 7 0 11z"/><path d="M0 11c5.5 0 8.5-3.5 8.5-7.5C3.5 3.5 0 7 0 11z"/></g>',
+  /* 稲穂と水（下の弧） */
+  5:'<g transform="translate(50 79)">'+
+    '<path d="M-9 10c-3.5-7-2.5-14 1.5-19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'+
+    '<path d="M9 10c3.5-7 2.5-14-1.5-19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'+
+    grain(-8,-1)+grain(8,1)+'</g>',
+  /* 鳳凰堂（上の弧） */
+  10:'<g transform="translate(50 25)">'+
+     '<path d="M-17 4 0-8 17 4z"/><path d="M-12 5h24v3h-24z"/>'+
+     '<path d="M-9 9h2.6v8H-9zM-4 9h2.6v8H-4zM1.4 9H4v8H1.4zM6.4 9H9v8H6.4z"/>'+
+     '<path d="M-15 18h30v2.4h-30z"/></g>',
+  /* 菊（下の弧） */
+  50:'<g transform="translate(50 77)">'+ringPetals(12,4.5,12.5,3)+'<circle r="3.6"/></g>',
+  /* 桜三輪（上の弧） */
+  100: flower(50,23,12)+flower(27,31,9.5)+flower(73,31,9.5),
+  /* 桐（上の弧） */
+  500:'<g transform="translate(50 25)">'+
+      '<path d="M0-14v9M-8-11v7M8-11v7" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round"/>'+
+      '<circle cy="-15.5" r="2.5"/><circle cx="-8" cy="-12" r="2.1"/><circle cx="8" cy="-12" r="2.1"/>'+
+      '<path d="M0-3c-9 1.4-14 8-14 17 7.7 0 14-6 14-17z"/><path d="M0-3c9 1.4 14 8 14 17-7.7 0-14-6-14-17z"/>'+
+      '<path d="M0 1c-4 3-5.4 9.5-4 18 4.8-3.4 6-11 4-18z" opacity=".75"/></g>'
+};
+function grain(x0,dir){
+  let s="";
+  for(let i=0;i<5;i++){
+    const y=-12+i*4.4, x=x0+dir*i*.5;
+    s+='<ellipse cx="'+(x+dir*3.4).toFixed(1)+'" cy="'+y.toFixed(1)+'" rx="2.6" ry="1.4" transform="rotate('+(dir*32)+' '+x+' '+y+')"/>';
+  }
+  return s;
+}
+function ringPetals(n,r0,r1,w){
+  let s="";
+  for(let i=0;i<n;i++)
+    s+='<ellipse cy="'+(-(r0+r1)/2).toFixed(1)+'" rx="'+w+'" ry="'+((r1-r0)/2).toFixed(1)+
+       '" transform="rotate('+(i*360/n).toFixed(1)+')"/>';
+  return s;
+}
+function symbolFor(v){
+  const m=MET[v], id="s"+v;
+  const g='<linearGradient id="g'+v+'" x1="0" y1="0" x2=".55" y2="1">'+
+    '<stop offset="0" stop-color="'+m.a+'"/><stop offset="1" stop-color="'+m.b+'"/></linearGradient>';
+  let body="", ring="";
+  if(m.bill){
+    const digits=String(v).length, fs=digits===5?20:25;
+    body=
+      '<rect x="3" y="17" width="94" height="66" rx="7" fill="url(#g'+v+')" stroke="'+m.rim+'" stroke-width="1.2"/>'+
+      '<rect x="7" y="21" width="86" height="58" rx="5" fill="none" stroke="'+m.motif+'" stroke-width=".9" opacity=".45"/>'+
+      '<rect x="9.5" y="23.5" width="81" height="53" rx="4" fill="none" stroke="'+m.motif+'" stroke-width=".6" opacity=".3"/>'+
+      '<g opacity=".55" fill="none" stroke="'+m.motif+'" stroke-width=".7">'+
+        '<ellipse cx="21" cy="50" rx="11" ry="16"/><ellipse cx="21" cy="50" rx="8.4" ry="12.5"/>'+
+        '<ellipse cx="21" cy="50" rx="5.8" ry="9"/><ellipse cx="21" cy="50" rx="3" ry="5"/>'+
+      '</g>'+
+      '<g opacity=".3" fill="none" stroke="'+m.motif+'" stroke-width=".7">'+
+        '<path d="M48 25h44M48 29h44M48 71h44M48 75h44"/></g>'+
+      '<text x="62" y="58" text-anchor="middle" font-size="'+fs+'" fill="'+m.ink+
+        '" paint-order="stroke" stroke="rgba(255,255,255,.55)" stroke-width="4.5" stroke-linejoin="round">'+v+'</text>'+
+      '';
+    ring='<rect x="1" y="15" width="98" height="70" rx="9" fill="none" stroke="var(--selp,transparent)" stroke-width="2.6"/>'+
+         '<rect x="-0.6" y="13.4" width="101.2" height="73.2" rx="10.6" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
+  } else {
+    const digits=String(v).length;
+    const holed=!!m.hole;
+    const fs = holed ? 29 : (digits<=2 ? 40 : 32);
+    const ty = holed ? 32 : (digits<=2 ? 72 : 70);
+    body =
+      (m.reed?'<path d="'+reedPath(m.reed,41,45.6,m.skew)+'" stroke="'+m.rim+'" stroke-width="1.5" fill="none" opacity=".85"/>':'')+
+      '<circle cx="50" cy="50" r="44" fill="url(#g'+v+')" stroke="'+m.rim+'" stroke-width="1.2"/>'+
+      (m.inner?'<linearGradient id="gi'+v+'" x1="0" y1="0" x2=".55" y2="1"><stop offset="0" stop-color="'+
+        m.inner.a+'"/><stop offset="1" stop-color="'+m.inner.b+'"/></linearGradient>'+
+        '<circle cx="50" cy="50" r="31" fill="url(#gi'+v+')" stroke="'+m.rim+'" stroke-width=".9" opacity=".95"/>':'')+
+      '<circle cx="50" cy="50" r="38.5" fill="none" stroke="'+m.rim+'" stroke-width="1" opacity=".5"/>'+
+      '<g fill="'+m.motif+'" color="'+m.motif+'" opacity=".5">'+(MOTIF[v]||'')+'</g>'+
+      (holed?'<circle cx="50" cy="55" r="8.6" fill="var(--paper,#F5F2EC)" stroke="'+m.rim+'" stroke-width="1"/>':'')+
+      '<text x="50" y="'+ty+'" text-anchor="middle" font-size="'+fs+'" fill="'+m.ink+
+        '" paint-order="stroke" stroke="rgba(255,255,255,.6)" stroke-width="5.5" stroke-linejoin="round">'+v+'</text>';
+    ring='<circle cx="50" cy="50" r="45.4" fill="none" stroke="var(--selp,transparent)" stroke-width="2.6"/>'+
+         '<circle cx="50" cy="50" r="47.9" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
+  }
+  return '<symbol id="'+id+'" viewBox="0 0 100 100">'+g+body+ring+'</symbol>';
+}
+function buildSprite(){
+  const sv=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  sv.id="sprite"; sv.setAttribute("aria-hidden","true");
+  sv.innerHTML=[1,5,10,50,100,500,1000,5000,10000].map(symbolFor).join("");
+  document.body.appendChild(sv);
+}
+function faceHTML(v,d){
+  return '<svg class="face" viewBox="0 0 100 100"'+(d?' style="--d:'+d+'px"':'')+
+    ' role="img" aria-label="'+v+'円"><use href="#s'+v+'"/></svg>';
 }
 function mkCoin(c){
   const el=document.createElement("div");
   el.className="pc"; el.dataset.id=c.id;
   el.style.setProperty("--x",c.x+"px"); el.style.setProperty("--y",c.y+"px");
-  el.innerHTML=faceHTML(c.v,CS);
+  el.innerHTML=faceHTML(c.v);
   board.appendChild(el); return el;
 }
 const elOf=id=>board.querySelector('.pc[data-id="'+id+'"]');
@@ -222,6 +331,7 @@ function measure(){
       }
     });
   } else { colsEl.innerHTML=""; }
+  board.style.setProperty("--d",CS+"px");
   render();
 }
 function chartPos(){
@@ -242,8 +352,7 @@ function render(){
   coins.forEach(c=>{
     let el=elOf(c.id);
     if(!el) el=mkCoin(c);
-    else { el.querySelector(".face").style.setProperty("--d",CS+"px");
-           el.style.setProperty("--x",c.x+"px"); el.style.setProperty("--y",c.y+"px"); }
+    else { el.style.setProperty("--x",c.x+"px"); el.style.setProperty("--y",c.y+"px"); }
     el.classList.toggle("sel",sel.has(c.id));
     seen.add(String(c.id));
   });
@@ -318,7 +427,7 @@ function buildPalette(){
   SET.forEach(v=>{
     const b=document.createElement("button");
     b.className="chip"; b.dataset.v=v; b.setAttribute("aria-label",v+"円");
-    b.innerHTML=faceHTML(v,BIG?76:52);
+    b.innerHTML=faceHTML(v,BIG?78:54);
     b.addEventListener("click",()=>onPalette(v));
     palEl.appendChild(b);
   });
@@ -429,7 +538,7 @@ function drawCtx(){
   if(breakMenu && opts.length){
     opts.forEach(o=>{
       const b=document.createElement("button"); b.className="opt";
-      b.innerHTML=faceHTML(o.to,34,"mini")+'<span class="x">×'+o.k+'</span>';
+      b.innerHTML=faceHTML(o.to)+'<span class="x">×'+o.k+'</span>';
       b.onclick=e=>{e.stopPropagation(); breakMenu=false; doBreak(o);};
       box.appendChild(b);
     });
@@ -559,32 +668,45 @@ if(TEACH){
     catch(_){ prompt("このURLをコピー",u.toString()); }
   };
   $("#savePng").onclick=()=>{
-    const W=board.clientWidth, H=board.clientHeight, s=2;
-    const cv=document.createElement("canvas"); cv.width=W*s; cv.height=H*s;
-    const g=cv.getContext("2d"); g.scale(s,s);
-    g.fillStyle=getComputedStyle(document.body).backgroundColor; g.fillRect(0,0,W,H);
-    const fill={1:"#E7E9EB",5:"#DDCA90",10:"#C6976B",50:"#C0C4C8",100:"#ADB2B8",
-      500:"#C6A44A",1000:"#B6C7D9",5000:"#C0AFD0",10000:"#BAAF98"};
-    coins.forEach(c=>{
-      g.save(); g.translate(c.x,c.y); g.fillStyle=fill[c.v]||"#ccc";
-      g.strokeStyle="rgba(0,0,0,.28)"; g.lineWidth=1;
-      if(c.v>=1000){ const w=CS,h=CS*0.66,r=CS*0.13;
-        g.beginPath(); g.roundRect(-w/2,-h/2,w,h,r); g.fill(); g.stroke(); }
-      else { g.beginPath(); g.arc(0,0,CS/2,0,7); g.fill(); g.stroke(); }
-      const dg=String(c.v).length;
-      g.fillStyle="#17150F"; g.textAlign="center"; g.textBaseline="middle";
-      g.font="800 "+Math.round(CS*(dg<=2?.42:dg===3?.34:dg===4?.27:.22))+'px "M PLUS Rounded 1c",sans-serif';
-      g.fillText(String(c.v),0,(c.v===5||c.v===50)?-CS*0.2:0);
-      if(c.v===5||c.v===50){ g.fillStyle=getComputedStyle(document.body).backgroundColor;
-        g.beginPath(); g.arc(0,0,CS*0.12,0,7); g.fill(); }
-      g.restore();
-    });
-    cv.toBlob(b=>{ const a=document.createElement("a");
-      a.href=URL.createObjectURL(b); a.download="okane.png"; a.click(); toast("がぞうを ほぞんしました"); });
+    /* 盤面と同じスプライトを使い、独立したSVGを組んでラスタライズする。
+       画面の見えとPNGが食い違わないよう、描画コードを二重に持たない。 */
+    const W=board.clientWidth, H=board.clientHeight, S=2;
+    const paper=getComputedStyle(document.body).backgroundColor;
+    const defs=document.getElementById("sprite").innerHTML;
+    const uses=coins.map(c=>'<use href="#s'+c.v+'" x="'+(c.x-CS/2).toFixed(1)+'" y="'+(c.y-CS/2).toFixed(1)+
+      '" width="'+CS+'" height="'+CS+'"/>').join("");
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" '+
+      'style="--paper:'+paper+'">'+
+      '<style>text{font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN",sans-serif;'+
+      'font-weight:800;letter-spacing:-.04em}</style>'+
+      '<rect width="'+W+'" height="'+H+'" fill="'+paper+'"/>'+defs+uses+'</svg>';
+    const img=new Image();
+    img.onload=()=>{
+      const cv=document.createElement("canvas"); cv.width=W*S; cv.height=H*S;
+      const g=cv.getContext("2d"); g.scale(S,S); g.drawImage(img,0,0);
+      cv.toBlob(async bl=>{
+        /* アーティファクト上では保存がプラットフォーム側の確認を通る。
+           GitHub Pages では window.claude が無いので通常のダウンロードに落ちる。 */
+        let dl=null;
+        try{ if(window.claude&&window.claude.use) dl=await window.claude.use("downloads"); }catch(_){}
+        if(dl&&dl.save){
+          try{ await dl.save({filename:"okane.png",data:bl}); toast("がぞうを ほぞんしました"); }
+          catch(err){ if(!err||err.code!=="declined") toast("がぞうを ほぞんできませんでした"); }
+          return;
+        }
+        const url=URL.createObjectURL(bl);
+        const a2=document.createElement("a"); a2.href=url; a2.download="okane.png"; a2.click();
+        setTimeout(()=>URL.revokeObjectURL(url),4000);
+        toast("がぞうを ほぞんしました");
+      });
+    };
+    img.onerror=()=>toast("がぞうを つくれませんでした");
+    img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
   };
 }
 
 /* ---------- 起動 ---------- */
+buildSprite();
 buildPalette();
 addEventListener("resize",()=>{ measure(); });
 measure();
