@@ -60,7 +60,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 /* ---- 盤面 ---- */
 #board{position:relative;flex:1;overflow:hidden;touch-action:none;min-height:0;--d:68px}
 #cols{position:absolute;inset:0;pointer-events:none}
-.col{position:absolute;top:0;bottom:0;border-right:1px solid var(--line)}
+.col{position:absolute;top:0;bottom:0;border-right:1px solid var(--line);
+  background:color-mix(in srgb,var(--ink) 3%,var(--paper))}
+.col.first{border-left:1px solid var(--line)}
 .col:last-child{border-right:0}
 .col .ttl{position:absolute;top:6px;left:0;right:0;text-align:center;
   font-family:var(--gothic);font-weight:700;font-size:13px;color:var(--ink-sub);letter-spacing:.08em}
@@ -122,7 +124,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
    横に並べるとパレットの幅が半分になり、金種が4段に折れて盤面を潰す。 */
 @media (max-width:560px){
   #tray{flex-direction:column;align-items:stretch;gap:8px;padding:8px 10px}
-  #pal{--d:46px;justify-content:flex-start}
+  #pal{justify-content:flex-start}
   #tools{justify-content:flex-end}
   #tools button{min-height:46px}
 }
@@ -179,24 +181,25 @@ const RM   = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let coins=[], sel=new Set(), hist=[], busy=false, uid=1;
 let CS=68, slotH=64, colW=0, colX={};
 
-/* ---------- 貨幣の描画 ---------- */
 /* ---------- 貨幣の図案（SVGスプライト） ----------
-   実物画像は使わない（模造取締法／素材の再配布）。実物の識別手がかり
-   ――穴・ギザ・金属色・植物モチーフ――を写実でなく図案として起こす。 */
+   実物画像は使わない（模造取締法／素材の再配布）。
+   46〜68pxで読めるのは「構造」だけ。縁・内縁の輪・穴・ギザ・金属の照り返しは
+   その寸法でも残るが、植物などの内部の細かい模様は汚れにしか見えないので描かない。
+   識別は 数字（主）＋ 穴・ギザ・色（副）で足りる。 */
 const MET={
-  1   :{a:"#F5F7F9",b:"#BCC2C9",rim:"#959BA2",ink:"#343A40",motif:"#5A6067"},
-  5   :{a:"#F3E3A8",b:"#C8A74B",rim:"#A68933",ink:"#4A3A10",motif:"#6B551B",hole:1},
-  10  :{a:"#E4B68D",b:"#A56E47",rim:"#875636",ink:"#3E2413",motif:"#6B4023"},
-  50  :{a:"#E7EAED",b:"#A5ABB2",rim:"#888F96",ink:"#33383D",motif:"#5A6067",hole:1,reed:78},
-  100 :{a:"#EDEFF1",b:"#9DA4AB",rim:"#81888F",ink:"#2E3338",motif:"#565C63",reed:86},
-  500 :{a:"#EBC961",b:"#BC9430",rim:"#9A7724",ink:"#40310A",motif:"#6B5416",reed:92,skew:.05,
-        inner:{a:"#E9EBED",b:"#B2B7BC"}},
-  1000:{a:"#D4E3F0",b:"#7FA3C4",rim:"#5D82A5",ink:"#16324C",motif:"#2E547B",bill:1},
-  5000:{a:"#DFCFE9",b:"#9B80B8",rim:"#7A6096",ink:"#33204A",bill:1},
-  10000:{a:"#E1D7C2",b:"#A79473",rim:"#87755A",ink:"#372C16",bill:1}
+  1    :{a:"#F2F5F7",b:"#B4BBC2",rim:"#8E959D",ink:"#2E343A",thin:1},
+  5    :{a:"#F2DE96",b:"#C2A040",rim:"#9C8028",ink:"#45360C",hole:1},
+  10   :{a:"#E3AF80",b:"#9E663D",rim:"#7E502C",ink:"#3A2010"},
+  50   :{a:"#E3E7EA",b:"#9BA2AA",rim:"#7D858D",ink:"#2B3036",hole:1,reed:70},
+  100  :{a:"#DDE2E7",b:"#929AA3",rim:"#757D86",ink:"#262B31",reed:78},
+  500  :{a:"#EFCB5C",b:"#B88E28",rim:"#94711C",ink:"#3E2F08",reed:84,skew:.05,
+         inner:{a:"#E7EAED",b:"#AAB0B6"}},
+  1000 :{a:"#C6D9EA",b:"#6E96BC",rim:"#4F7699",ink:"#122C46",motif:"#2E547B",bill:1},
+  5000 :{a:"#D6C2E4",b:"#8D6FAE",rim:"#6D538B",ink:"#2D1B43",motif:"#5B3F7E",bill:1},
+  10000:{a:"#DCD0B6",b:"#9C8967",rim:"#7C6A4F",ink:"#312712",motif:"#6B5A3A",bill:1}
 };
-MET[1000].motif="#2E547B"; MET[5000].motif="#5B3F7E"; MET[10000].motif="#6B5A3A";
-
+/* ギザ（縁のきざみ）。50円・100円・500円だけが持つ実在の手がかりで、
+   小さくても輪郭の質感として残る。500円は斜めギザなので skew を入れる。 */
 function reedPath(n,r0,r1,skew){
   let d="";
   for(let i=0;i<n;i++){
@@ -206,106 +209,69 @@ function reedPath(n,r0,r1,skew){
   }
   return d;
 }
-/* モチーフは「その貨幣だと気づくための記号」。数字が主手がかりなので、
-   中央には置かず外周の弧に小さく収める。穴のある5円50円は数字が上なので下の弧へ。 */
-function flower(cx,cy,R,n,pr){
-  n=n||5; pr=pr||.34;
-  let s="";
-  for(let i=0;i<n;i++)
-    s+='<ellipse cx="'+cx+'" cy="'+(cy-R*.58).toFixed(1)+'" rx="'+(R*(pr||.34)).toFixed(1)+'" ry="'+(R*.5).toFixed(1)+
-       '" transform="rotate('+(i*360/n).toFixed(1)+' '+cx+' '+cy+')"/>';
-  return s+'<circle cx="'+cx+'" cy="'+cy+'" r="'+(R*.18).toFixed(1)+'"/>';
-}
-function reedPath2(){return"";}
-const MOTIF={
-  /* 若木（上の弧） */
-  1:'<g transform="translate(50 24)">'+
-    '<path d="M0 13V-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'+
-    '<path d="M0 1c-7-.5-10.5-5-10.5-11C-4.5-12 0-7 0 1z"/><path d="M0 1c7-.5 10.5-5 10.5-11C4.5-12 0-7 0 1z"/>'+
-    '<path d="M0 11c-5.5 0-8.5-3.5-8.5-7.5C-3.5 3.5 0 7 0 11z"/><path d="M0 11c5.5 0 8.5-3.5 8.5-7.5C3.5 3.5 0 7 0 11z"/></g>',
-  /* 稲穂と水（下の弧） */
-  5:'<g transform="translate(50 79)">'+
-    '<path d="M-9 10c-3.5-7-2.5-14 1.5-19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'+
-    '<path d="M9 10c3.5-7 2.5-14-1.5-19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'+
-    grain(-8,-1)+grain(8,1)+'</g>',
-  /* 鳳凰堂（上の弧） */
-  10:'<g transform="translate(50 25)">'+
-     '<path d="M-17 4 0-8 17 4z"/><path d="M-12 5h24v3h-24z"/>'+
-     '<path d="M-9 9h2.6v8H-9zM-4 9h2.6v8H-4zM1.4 9H4v8H1.4zM6.4 9H9v8H6.4z"/>'+
-     '<path d="M-15 18h30v2.4h-30z"/></g>',
-  /* 菊（下の弧） */
-  50:'<g transform="translate(50 77)">'+ringPetals(12,4.5,12.5,3)+'<circle r="3.6"/></g>',
-  /* 桜三輪（上の弧） */
-  100: flower(50,23,12)+flower(27,31,9.5)+flower(73,31,9.5),
-  /* 桐（上の弧） */
-  500:'<g transform="translate(50 25)">'+
-      '<path d="M0-14v9M-8-11v7M8-11v7" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round"/>'+
-      '<circle cy="-15.5" r="2.5"/><circle cx="-8" cy="-12" r="2.1"/><circle cx="8" cy="-12" r="2.1"/>'+
-      '<path d="M0-3c-9 1.4-14 8-14 17 7.7 0 14-6 14-17z"/><path d="M0-3c9 1.4 14 8 14 17-7.7 0-14-6-14-17z"/>'+
-      '<path d="M0 1c-4 3-5.4 9.5-4 18 4.8-3.4 6-11 4-18z" opacity=".75"/></g>'
-};
-function grain(x0,dir){
-  let s="";
-  for(let i=0;i<5;i++){
-    const y=-12+i*4.4, x=x0+dir*i*.5;
-    s+='<ellipse cx="'+(x+dir*3.4).toFixed(1)+'" cy="'+y.toFixed(1)+'" rx="2.6" ry="1.4" transform="rotate('+(dir*32)+' '+x+' '+y+')"/>';
-  }
-  return s;
-}
-function ringPetals(n,r0,r1,w){
-  let s="";
-  for(let i=0;i<n;i++)
-    s+='<ellipse cy="'+(-(r0+r1)/2).toFixed(1)+'" rx="'+w+'" ry="'+((r1-r0)/2).toFixed(1)+
-       '" transform="rotate('+(i*360/n).toFixed(1)+')"/>';
-  return s;
-}
+const SHARED=
+  '<radialGradient id="sheen" cx=".34" cy=".26" r=".74">'+
+    '<stop offset="0" stop-color="#fff" stop-opacity=".62"/>'+
+    '<stop offset=".5" stop-color="#fff" stop-opacity=".14"/>'+
+    '<stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>'+
+  '<radialGradient id="shade" cx=".7" cy=".8" r=".72">'+
+    '<stop offset="0" stop-color="#000" stop-opacity=".26"/>'+
+    '<stop offset=".55" stop-color="#000" stop-opacity=".06"/>'+
+    '<stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>';
+
 function symbolFor(v){
-  const m=MET[v], id="s"+v;
-  const g='<linearGradient id="g'+v+'" x1="0" y1="0" x2=".55" y2="1">'+
+  const m=MET[v];
+  const g='<linearGradient id="g'+v+'" x1=".1" y1="0" x2=".7" y2="1">'+
     '<stop offset="0" stop-color="'+m.a+'"/><stop offset="1" stop-color="'+m.b+'"/></linearGradient>';
   let body="", ring="";
   if(m.bill){
-    const digits=String(v).length, fs=digits===5?20:25;
+    const fs=String(v).length===5?20:25;
     body=
-      '<rect x="3" y="17" width="94" height="66" rx="7" fill="url(#g'+v+')" stroke="'+m.rim+'" stroke-width="1.2"/>'+
-      '<rect x="7" y="21" width="86" height="58" rx="5" fill="none" stroke="'+m.motif+'" stroke-width=".9" opacity=".45"/>'+
-      '<rect x="9.5" y="23.5" width="81" height="53" rx="4" fill="none" stroke="'+m.motif+'" stroke-width=".6" opacity=".3"/>'+
-      '<g opacity=".55" fill="none" stroke="'+m.motif+'" stroke-width=".7">'+
+      '<rect x="3" y="17" width="94" height="66" rx="7" fill="url(#g'+v+')" stroke="'+m.rim+'" stroke-width="1.4"/>'+
+      '<rect x="3" y="17" width="94" height="66" rx="7" fill="url(#sheen)"/>'+
+      '<rect x="7" y="21" width="86" height="58" rx="5" fill="none" stroke="'+m.motif+'" stroke-width="1" opacity=".5"/>'+
+      '<rect x="9.5" y="23.5" width="81" height="53" rx="4" fill="none" stroke="'+m.motif+'" stroke-width=".6" opacity=".32"/>'+
+      '<g opacity=".6" fill="none" stroke="'+m.motif+'" stroke-width=".8">'+
         '<ellipse cx="21" cy="50" rx="11" ry="16"/><ellipse cx="21" cy="50" rx="8.4" ry="12.5"/>'+
-        '<ellipse cx="21" cy="50" rx="5.8" ry="9"/><ellipse cx="21" cy="50" rx="3" ry="5"/>'+
-      '</g>'+
-      '<g opacity=".3" fill="none" stroke="'+m.motif+'" stroke-width=".7">'+
+        '<ellipse cx="21" cy="50" rx="5.8" ry="9"/><ellipse cx="21" cy="50" rx="3" ry="5"/></g>'+
+      '<g opacity=".32" fill="none" stroke="'+m.motif+'" stroke-width=".8">'+
         '<path d="M48 25h44M48 29h44M48 71h44M48 75h44"/></g>'+
       '<text x="62" y="58" text-anchor="middle" font-size="'+fs+'" fill="'+m.ink+
-        '" paint-order="stroke" stroke="rgba(255,255,255,.55)" stroke-width="4.5" stroke-linejoin="round">'+v+'</text>'+
-      '';
+        '" paint-order="stroke" stroke="rgba(255,255,255,.5)" stroke-width="4.5" stroke-linejoin="round">'+v+'</text>';
     ring='<rect x="1" y="15" width="98" height="70" rx="9" fill="none" stroke="var(--selp,transparent)" stroke-width="2.6"/>'+
          '<rect x="-0.6" y="13.4" width="101.2" height="73.2" rx="10.6" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
   } else {
-    const digits=String(v).length;
-    const holed=!!m.hole;
-    const fs = holed ? 29 : (digits<=2 ? 40 : 32);
-    const ty = holed ? 32 : (digits<=2 ? 72 : 70);
+    const digits=String(v).length, holed=!!m.hole;
+    const fs = holed ? 33 : (digits<=2 ? 44 : 36);
+    const ty = holed ? 41 : (digits<=2 ? 65 : 63);
+    /* 内縁の輪。500円のバイカラーの境目が読めたのはこの輪があるから。
+       明るい線の内側に暗い線を添えると、縁が盛り上がって見える。 */
+    const ir = m.inner ? 30.5 : 37.5;
     body =
-      (m.reed?'<path d="'+reedPath(m.reed,41,45.6,m.skew)+'" stroke="'+m.rim+'" stroke-width="1.5" fill="none" opacity=".85"/>':'')+
-      '<circle cx="50" cy="50" r="44" fill="url(#g'+v+')" stroke="'+m.rim+'" stroke-width="1.2"/>'+
-      (m.inner?'<linearGradient id="gi'+v+'" x1="0" y1="0" x2=".55" y2="1"><stop offset="0" stop-color="'+
+      (m.reed?'<path d="'+reedPath(m.reed,40.5,45.8,m.skew)+'" stroke="'+m.rim+'" stroke-width="1.9" fill="none"/>':'')+
+      '<circle cx="50" cy="50" r="44" fill="url(#g'+v+')"/>'+
+      (m.inner?'<linearGradient id="gi'+v+'" x1=".1" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="'+
         m.inner.a+'"/><stop offset="1" stop-color="'+m.inner.b+'"/></linearGradient>'+
-        '<circle cx="50" cy="50" r="31" fill="url(#gi'+v+')" stroke="'+m.rim+'" stroke-width=".9" opacity=".95"/>':'')+
-      '<circle cx="50" cy="50" r="38.5" fill="none" stroke="'+m.rim+'" stroke-width="1" opacity=".5"/>'+
-      '<g fill="'+m.motif+'" color="'+m.motif+'" opacity=".5">'+(MOTIF[v]||'')+'</g>'+
-      (holed?'<circle cx="50" cy="55" r="8.6" fill="var(--paper,#F5F2EC)" stroke="'+m.rim+'" stroke-width="1"/>':'')+
+        '<circle cx="50" cy="50" r="'+ir+'" fill="url(#gi'+v+')"/>':'')+
+      '<circle cx="50" cy="50" r="44" fill="url(#shade)"/>'+
+      '<circle cx="50" cy="50" r="44" fill="url(#sheen)"/>'+
+      '<circle cx="50" cy="50" r="44" fill="none" stroke="'+m.rim+'" stroke-width="1.8"/>'+
+      '<circle cx="50" cy="50" r="'+(ir+1.1)+'" fill="none" stroke="#fff" stroke-width="2" opacity="'+(m.thin?.3:.45)+'"/>'+
+      '<circle cx="50" cy="50" r="'+(ir-0.7)+'" fill="none" stroke="'+m.rim+'" stroke-width="1.5" opacity="'+(m.thin?.35:.55)+'"/>'+
+      (holed?'<circle cx="50" cy="56" r="10" fill="var(--paper,#F5F2EC)"/>'+
+             '<circle cx="50" cy="56" r="10" fill="none" stroke="'+m.rim+'" stroke-width="1.5"/>'+
+             '<circle cx="50" cy="56" r="11.4" fill="none" stroke="#fff" stroke-width="1.6" opacity=".4"/>':'')+
       '<text x="50" y="'+ty+'" text-anchor="middle" font-size="'+fs+'" fill="'+m.ink+
-        '" paint-order="stroke" stroke="rgba(255,255,255,.6)" stroke-width="5.5" stroke-linejoin="round">'+v+'</text>';
+        '" paint-order="stroke" stroke="rgba(255,255,255,.5)" stroke-width="5" stroke-linejoin="round">'+v+'</text>';
     ring='<circle cx="50" cy="50" r="45.4" fill="none" stroke="var(--selp,transparent)" stroke-width="2.6"/>'+
          '<circle cx="50" cy="50" r="47.9" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
   }
-  return '<symbol id="'+id+'" viewBox="0 0 100 100">'+g+body+ring+'</symbol>';
+  return '<symbol id="s'+v+'" viewBox="0 0 100 100">'+g+body+ring+'</symbol>';
 }
 function buildSprite(){
   const sv=document.createElementNS("http://www.w3.org/2000/svg","svg");
   sv.id="sprite"; sv.setAttribute("aria-hidden","true");
-  sv.innerHTML=[1,5,10,50,100,500,1000,5000,10000].map(symbolFor).join("");
+  sv.innerHTML="<defs>"+SHARED+"</defs>"+[1,5,10,50,100,500,1000,5000,10000].map(symbolFor).join("");
   document.body.appendChild(sv);
 }
 function faceHTML(v,d){
@@ -333,14 +299,14 @@ function measure(){
   if(MODE==="chart"){
     slotH = Math.min(CS, (h-46)/10.6);
     CS = Math.min(CS, slotH*0.92);
-    colW = Math.min(w/SET.length, CS*1.75);
+    colW = w/SET.length;
     const ox = (w - colW*SET.length)/2;
     colsEl.innerHTML="";
     const top=SET[SET.length-1];
     SET.slice().reverse().forEach((v,i)=>{
       colX[v]=ox+colW*(i+0.5);
       const d=document.createElement("div");
-      d.className="col"; d.style.left=(ox+colW*i)+"px"; d.style.width=colW+"px";
+      d.className="col"+(i===0?" first":""); d.style.left=(ox+colW*i)+"px"; d.style.width=colW+"px";
       d.innerHTML='<div class="ttl">'+NAME[v]+'</div>';
       colsEl.appendChild(d);
       if(v!==top){
@@ -352,6 +318,15 @@ function measure(){
     });
   } else { colsEl.innerHTML=""; }
   board.style.setProperty("--d",CS+"px");
+  /* パレットの貨幣は盤面の貨幣と同じ大きさにする。
+     大きさが違うと「パレットの丸」と「盤面の丸」が別物に見え、対応がつかない。 */
+  const narrow=w<560;
+  const toolsW=document.getElementById("tools").offsetWidth||140;
+  const avail=narrow ? w-20 : w-24-toolsW-10;
+  const perRow=narrow ? Math.ceil(SET.length/2) : SET.length;
+  palEl.style.setProperty("--d",
+    Math.round(Math.max(narrow?40:44,
+      Math.min(narrow?52:(BIG?96:76), CS, avail/perRow-18)))+"px");
   render();
 }
 function chartPos(){
@@ -447,7 +422,7 @@ function buildPalette(){
   SET.forEach(v=>{
     const b=document.createElement("button");
     b.className="chip"; b.dataset.v=v; b.setAttribute("aria-label",v+"円");
-    b.innerHTML=faceHTML(v,BIG?78:54);
+    b.innerHTML=faceHTML(v);
     b.addEventListener("click",()=>onPalette(v));
     palEl.appendChild(b);
   });
