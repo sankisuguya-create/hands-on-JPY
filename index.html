@@ -242,8 +242,11 @@ function symbolFor(v){
          '<rect x="-0.6" y="13.4" width="101.2" height="73.2" rx="10.6" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
   } else {
     const digits=String(v).length, holed=!!m.hole;
-    const fs = holed ? 33 : (digits<=2 ? 44 : 36);
-    const ty = holed ? 41 : (digits<=2 ? 65 : 63);
+    const fs = holed ? 30 : (digits<=2 ? 44 : 36);
+    const ty = holed ? 37 : (digits<=2 ? 65 : 63);
+    /* 穴は円の中心。実物と同じ位置に置き、数字はその上の帯に収める。
+       穴の直径は実物の比率（5円 5/22、50円 4/21）に合わせる。 */
+    const hr = v===5 ? 10 : 8.6;
     /* 内縁の輪。500円のバイカラーの境目が読めたのはこの輪があるから。
        明るい線の内側に暗い線を添えると、縁が盛り上がって見える。 */
     const ir = m.inner ? 30.5 : 37.5;
@@ -258,11 +261,11 @@ function symbolFor(v){
       '<circle cx="50" cy="50" r="44" fill="none" stroke="'+m.rim+'" stroke-width="1.8"/>'+
       '<circle cx="50" cy="50" r="'+(ir+1.1)+'" fill="none" stroke="#fff" stroke-width="2" opacity="'+(m.thin?.3:.45)+'"/>'+
       '<circle cx="50" cy="50" r="'+(ir-0.7)+'" fill="none" stroke="'+m.rim+'" stroke-width="1.5" opacity="'+(m.thin?.35:.55)+'"/>'+
-      (holed?'<circle cx="50" cy="56" r="10" fill="var(--paper,#F5F2EC)"/>'+
-             '<circle cx="50" cy="56" r="10" fill="none" stroke="'+m.rim+'" stroke-width="1.5"/>'+
-             '<circle cx="50" cy="56" r="11.4" fill="none" stroke="#fff" stroke-width="1.6" opacity=".4"/>':'')+
+      (holed?'<circle cx="50" cy="50" r="'+hr+'" fill="var(--paper,#F5F2EC)"/>'+
+             '<circle cx="50" cy="50" r="'+hr+'" fill="none" stroke="'+m.rim+'" stroke-width="1.5"/>'+
+             '<circle cx="50" cy="50" r="'+(hr+1.4)+'" fill="none" stroke="#fff" stroke-width="1.6" opacity=".4"/>':'')+
       '<text x="50" y="'+ty+'" text-anchor="middle" font-size="'+fs+'" fill="'+m.ink+
-        '" paint-order="stroke" stroke="rgba(255,255,255,.5)" stroke-width="5" stroke-linejoin="round">'+v+'</text>';
+        '" paint-order="stroke" stroke="rgba(255,255,255,.5)" stroke-width="'+(holed?3.5:5)+'" stroke-linejoin="round">'+v+'</text>';
     ring='<circle cx="50" cy="50" r="45.4" fill="none" stroke="var(--selp,transparent)" stroke-width="2.6"/>'+
          '<circle cx="50" cy="50" r="47.9" fill="none" stroke="var(--selc,transparent)" stroke-width="4"/>';
   }
