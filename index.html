@@ -118,6 +118,14 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   font-weight:700;font-size:15px;z-index:9;pointer-events:none;opacity:0;transition:opacity .2s}
 #toast.on{opacity:.95}
 
+/* 狭い画面ではパレットと道具を上下に分ける。
+   横に並べるとパレットの幅が半分になり、金種が4段に折れて盤面を潰す。 */
+@media (max-width:560px){
+  #tray{flex-direction:column;align-items:stretch;gap:8px;padding:8px 10px}
+  #pal{--d:46px;justify-content:flex-start}
+  #tools{justify-content:flex-end}
+  #tools button{min-height:46px}
+}
 @media (prefers-reduced-motion:reduce){.pc.anim{transition:none}.pc.pop{animation:none}}
 @media print{
   #bar,#tray,#ctx,#toast{display:none!important}
